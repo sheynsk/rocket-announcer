@@ -16,8 +16,10 @@ export async function handleLogin(req, res) {
   try {
     const rc = await rcLogin(user, password);
     const roles = rc.user.roles || [];
-    if (!roles.includes('admin')) {
-      return res.status(403).json({ error: 'Only admin users can access this panel' });
+    const isAdmin = roles.includes('admin');
+
+    if (!isAdmin) {
+      return res.status(403).json({ error: 'Доступ только для администраторов' });
     }
 
     req.session.user = {
@@ -25,6 +27,7 @@ export async function handleLogin(req, res) {
       username: rc.user.username,
       name: rc.user.name || rc.user.username,
       roles,
+      isAdmin,
     };
     req.session.rcToken = rc.authToken;
 

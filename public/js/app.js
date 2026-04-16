@@ -28,6 +28,7 @@ document.addEventListener('alpine:init', () => {
 
     // announcements list
     announcements: [],
+    listTab: 'my', // 'my' | 'shared'
 
     // form
     form: emptyForm(),
@@ -90,7 +91,14 @@ document.addEventListener('alpine:init', () => {
 
     // ---- List ----
     async loadAnnouncements() {
-      this.announcements = await api('GET', '/announcements');
+      this.announcements = await api('GET', `/announcements?scope=${this.listTab}`);
+    },
+    switchTab(tab) {
+      this.listTab = tab;
+      this.loadAnnouncements();
+    },
+    isOwner(ann) {
+      return ann.owner_id === this.user?.id;
     },
     statusClass(s) {
       return 'status-' + s;
@@ -136,6 +144,7 @@ document.addEventListener('alpine:init', () => {
         quiet_mode: !!ann.quiet_mode,
         skip_if_recent: !!ann.skip_if_recent,
         skip_minutes: ann.skip_minutes || 10,
+        is_shared: !!ann.is_shared,
       };
       this.page = 'form';
       this.loadRooms();
@@ -235,6 +244,7 @@ function emptyForm() {
     weekly_days: [], time_hour: 9, time_minute: 0, monthly_day: 1,
     cron_expression: '', start_date: '', end_date: '',
     quiet_mode: false, skip_if_recent: false, skip_minutes: 10,
+    is_shared: false,
   };
 }
 

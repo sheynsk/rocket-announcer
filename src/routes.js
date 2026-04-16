@@ -3,6 +3,7 @@ import { requireAuth, handleLogin, handleLogout, handleMe } from './auth.js';
 import {
   getAllAnnouncements, getAnnouncementById, createAnnouncement,
   updateAnnouncement, deleteAnnouncement,
+  getAnnouncementsByOwner, getSharedAnnouncements,
   getLogsByAnnouncement, getAllLogs, createLog,
   getSetting, setSetting, getAllSettings, persist,
 } from './db.js';
@@ -39,7 +40,12 @@ router.use(requireAuth);
 
 // ---- Announcements CRUD ----
 router.get('/announcements', (req, res) => {
-  res.json(getAllAnnouncements());
+  const scope = req.query.scope; // 'my' | 'shared' | 'all'
+  const userId = req.session.user.id;
+  if (scope === 'my') return res.json(getAnnouncementsByOwner(userId));
+  if (scope === 'shared') return res.json(getSharedAnnouncements());
+  if (scope === 'all' && req.session.user.isAdmin) return res.json(getAllAnnouncements());
+  return res.json(getAnnouncementsByOwner(userId));
 });
 
 router.get('/announcements/:id', (req, res) => {
@@ -50,7 +56,13 @@ router.get('/announcements/:id', (req, res) => {
 
 router.post('/announcements', (req, res) => {
   try {
-    const data = { ...req.body, created_by: req.session.user?.name || req.session.user?.username };
+    const user = req.session.user;
+    const data = {
+      ...req.body,
+      created_by: user.name || user.username,
+      owner_id: user.id,
+      owner_username: user.username,
+    };
     const id = createAnnouncement(data);
     res.json({ ok: true, id });
   } catch (e) {
@@ -58,16 +70,25 @@ router.post('/announcements', (req, res) => {
   }
 });
 
+function canModify(ann, session) {
+  if (session.user.isAdmin) return true;
+  return ann.owner_id === session.user.id;
+}
+
 router.put('/announcements/:id', (req, res) => {
   const id = Number(req.params.id);
-  if (!getAnnouncementById(id)) return res.status(404).json({ error: 'Not found' });
+  const ann = getAnnouncementById(id);
+  if (!ann) return res.status(404).json({ error: 'Not found' });
+  if (!canModify(ann, req.session)) return res.status(403).json({ error: 'No permission' });
   updateAnnouncement(id, req.body);
   res.json({ ok: true });
 });
 
 router.delete('/announcements/:id', (req, res) => {
   const id = Number(req.params.id);
-  if (!getAnnouncementById(id)) return res.status(404).json({ error: 'Not found' });
+  const ann = getAnnouncementById(id);
+  if (!ann) return res.status(404).json({ error: 'Not found' });
+  if (!canModify(ann, req.session)) return res.status(403).json({ error: 'No permission' });
   deleteAnnouncement(id);
   res.json({ ok: true });
 });
@@ -76,6 +97,7 @@ router.post('/announcements/:id/toggle', (req, res) => {
   const id = Number(req.params.id);
   const ann = getAnnouncementById(id);
   if (!ann) return res.status(404).json({ error: 'Not found' });
+  if (!canModify(ann, req.session)) return res.status(403).json({ error: 'No permission' });
   const newStatus = ann.status === 'active' ? 'paused' : 'active';
   updateAnnouncement(id, {
     status: newStatus,
@@ -88,6 +110,7 @@ router.post('/announcements/:id/send-now', async (req, res) => {
   const id = Number(req.params.id);
   const ann = getAnnouncementById(id);
   if (!ann) return res.status(404).json({ error: 'Not found' });
+  if (!canModify(ann, req.session)) return res.status(403).json({ error: 'No permission' });
 
   const alias = ann.created_by || getSetting('bot_alias') || 'AutoAnnouncer';
   const text = processTemplate(ann.message);
@@ -122,8 +145,9 @@ router.get('/rooms', async (req, res) => {
   }
 });
 
-// ---- Settings ----
+// ---- Settings (admin only) ----
 router.get('/settings', (req, res) => {
+  if (!req.session.user.isAdmin) return res.status(403).json({ error: 'Admin only' });
   const s = getAllSettings();
   // mask token for security
   if (s.rc_token) s.rc_token = s.rc_token.slice(0, 6) + '••••••';
@@ -131,6 +155,7 @@ router.get('/settings', (req, res) => {
 });
 
 router.put('/settings', (req, res) => {
+  if (!req.session.user.isAdmin) return res.status(403).json({ error: 'Admin only' });
   const allowed = ['rc_url', 'rc_user_id', 'rc_token', 'bot_alias'];
   for (const k of allowed) {
     if (k in req.body) setSetting(k, req.body[k]);
@@ -139,6 +164,7 @@ router.put('/settings', (req, res) => {
 });
 
 router.post('/settings/test', async (req, res) => {
+  if (!req.session.user.isAdmin) return res.status(403).json({ error: 'Admin only' });
   try {
     const info = await testConnection();
     res.json(info);

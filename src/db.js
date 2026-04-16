@@ -46,17 +46,21 @@ export async function initDatabase() {
     last_sent_at TEXT,
     last_attempt_at TEXT,
     created_by TEXT,
+    owner_id TEXT,
+    owner_username TEXT,
+    is_shared INTEGER DEFAULT 0,
     created_at TEXT,
     updated_at TEXT
   )`);
 
-  // migration: add created_by if missing (existing DBs)
+  // migrations for existing DBs
   try {
     const cols = db.exec("PRAGMA table_info(announcements)");
-    const hasCreatedBy = cols[0]?.values?.some(r => r[1] === 'created_by');
-    if (!hasCreatedBy) {
-      db.run("ALTER TABLE announcements ADD COLUMN created_by TEXT");
-    }
+    const names = cols[0]?.values?.map(r => r[1]) || [];
+    if (!names.includes('created_by'))     db.run("ALTER TABLE announcements ADD COLUMN created_by TEXT");
+    if (!names.includes('owner_id'))       db.run("ALTER TABLE announcements ADD COLUMN owner_id TEXT");
+    if (!names.includes('owner_username')) db.run("ALTER TABLE announcements ADD COLUMN owner_username TEXT");
+    if (!names.includes('is_shared'))      db.run("ALTER TABLE announcements ADD COLUMN is_shared INTEGER DEFAULT 0");
   } catch {}
 
   db.run(`CREATE TABLE IF NOT EXISTS announcement_logs (
@@ -136,14 +140,25 @@ export function getActiveAnnouncements() {
   return resultToList(db.exec("SELECT * FROM announcements WHERE status = 'active'"));
 }
 
+export function getAnnouncementsByOwner(ownerId) {
+  return resultToList(db.exec(
+    'SELECT * FROM announcements WHERE owner_id = ? ORDER BY id DESC', [ownerId]));
+}
+
+export function getSharedAnnouncements() {
+  return resultToList(db.exec(
+    'SELECT * FROM announcements WHERE is_shared = 1 ORDER BY id DESC'));
+}
+
 export function createAnnouncement(data) {
   const now = new Date().toISOString();
   db.run(`INSERT INTO announcements
     (name, message, target_room, schedule_type, scheduled_date,
      interval_value, interval_unit, weekly_days, time_hour, time_minute,
      monthly_day, cron_expression, start_date, end_date,
-     quiet_mode, skip_if_recent, skip_minutes, status, created_by, created_at, updated_at)
-    VALUES (?,?,?,?,?, ?,?,?,?,?, ?,?,?,?, ?,?,?,?,?,?,?)`,
+     quiet_mode, skip_if_recent, skip_minutes, status,
+     created_by, owner_id, owner_username, is_shared, created_at, updated_at)
+    VALUES (?,?,?,?,?, ?,?,?,?,?, ?,?,?,?, ?,?,?,?, ?,?,?,?,?,?)`,
     [
       data.name, data.message, data.target_room, data.schedule_type || 'onetime',
       data.scheduled_date || null,
@@ -153,7 +168,9 @@ export function createAnnouncement(data) {
       data.monthly_day || null, data.cron_expression || null,
       data.start_date || null, data.end_date || null,
       data.quiet_mode ? 1 : 0, data.skip_if_recent ? 1 : 0,
-      data.skip_minutes || 0, 'active', data.created_by || null, now, now,
+      data.skip_minutes || 0, 'active',
+      data.created_by || null, data.owner_id || null, data.owner_username || null,
+      data.is_shared ? 1 : 0, now, now,
     ]);
   persist();
   const res = db.exec('SELECT last_insert_rowid()');
@@ -169,13 +186,13 @@ export function updateAnnouncement(id, data) {
     'interval_value', 'interval_unit', 'weekly_days', 'time_hour', 'time_minute',
     'monthly_day', 'cron_expression', 'start_date', 'end_date',
     'quiet_mode', 'skip_if_recent', 'skip_minutes', 'status',
-    'fail_count', 'fail_reason', 'last_sent_at', 'last_attempt_at',
+    'fail_count', 'fail_reason', 'last_sent_at', 'last_attempt_at', 'is_shared',
   ];
   for (const k of allowed) {
     if (k in data) {
       let v = data[k];
       if (k === 'weekly_days' && Array.isArray(v)) v = JSON.stringify(v);
-      if (k === 'quiet_mode' || k === 'skip_if_recent') v = v ? 1 : 0;
+      if (k === 'quiet_mode' || k === 'skip_if_recent' || k === 'is_shared') v = v ? 1 : 0;
       fields.push(`${k} = ?`);
       vals.push(v);
     }
