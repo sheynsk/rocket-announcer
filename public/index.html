@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rocket Announcer</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <link rel="stylesheet" href="/css/style.css">
+  <script src="/js/app.js"></script>
+</head>
+<body class="bg-gray-50 min-h-screen" x-data="app" x-cloak>
+
+<!-- Toast -->
+<template x-if="$store.toast.msg">
+  <div class="toast" :class="$store.toast.type === 'error' ? 'toast-error' : 'toast-success'"
+       x-text="$store.toast.msg"></div>
+</template>
+
+<!-- ==================== SETUP (first run) ==================== -->
+<template x-if="page === 'setup'">
+  <div class="flex items-center justify-center min-h-screen">
+    <div class="bg-white shadow-xl rounded-2xl p-8 w-full max-w-md fade-in">
+      <h1 class="text-2xl font-bold text-center mb-1">Rocket Announcer</h1>
+      <p class="text-gray-500 text-center text-sm mb-6">Первоначальная настройка подключения к Rocket.Chat</p>
+      <div class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">URL Rocket.Chat *</label>
+          <input x-model="setupUrl" class="w-full border rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-400 outline-none" placeholder="https://rocketchat.example.com">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">User ID техпользователя</label>
+          <input x-model="setupUserId" class="w-full border rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-400 outline-none" placeholder="ID пользователя для отправки сообщений">
+          <p class="text-xs text-gray-400 mt-1">Можно заполнить позже в Настройках</p>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Auth Token техпользователя</label>
+          <input x-model="setupToken" class="w-full border rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-400 outline-none" placeholder="Personal Access Token">
+          <p class="text-xs text-gray-400 mt-1">Можно заполнить позже в Настройках</p>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Имя бота (alias)</label>
+          <input x-model="setupAlias" class="w-full border rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-400 outline-none" placeholder="AutoAnnouncer">
+        </div>
+        <button @click="finishSetup()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 rounded-lg transition">Сохранить и продолжить</button>
+      </div>
+    </div>
+  </div>
+</template>
+
+<!-- ==================== LOGIN ==================== -->
+<template x-if="page === 'login'">
+  <div class="flex items-center justify-center min-h-screen">
+    <div class="bg-white shadow-xl rounded-2xl p-8 w-full max-w-sm fade-in">
+      <h1 class="text-2xl font-bold text-center mb-1">Rocket Announcer</h1>
+      <p class="text-gray-500 text-center text-sm mb-6">Войдите через Rocket.Chat (admin)</p>
+      <div class="space-y-4">
+        <input x-model="loginUser" placeholder="Логин" class="w-full border rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-400 outline-none" @keydown.enter="login">
+        <input x-model="loginPass" type="password" placeholder="Пароль" class="w-full border rounded-lg px-4 py-2 focus:ring-2 focus:ring-blue-400 outline-none" @keydown.enter="login">
+        <p x-show="loginError" class="text-red-500 text-sm" x-text="loginError"></p>
+        <button @click="login" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 rounded-lg transition">Войти</button>
+      </div>
+    </div>
+  </div>
+</template>
+
+<!-- ==================== MAIN LAYOUT ==================== -->
+<template x-if="page !== 'login' && page !== 'setup'">
+  <div class="fade-in">
+    <!-- Nav -->
+    <nav class="bg-white shadow-sm border-b sticky top-0 z-50">
+      <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+        <div class="flex items-center gap-4">
+          <span class="font-bold text-lg text-blue-700 cursor-pointer" @click="page='list'; loadAnnouncements()">Rocket Announcer</span>
+          <button @click="page='list'; loadAnnouncements()" class="text-sm px-3 py-1 rounded-md" :class="page==='list' ? 'bg-blue-100 text-blue-700 font-semibold' : 'text-gray-600 hover:bg-gray-100'">Анонсы</button>
+          <button @click="openLogs()" class="text-sm px-3 py-1 rounded-md" :class="page==='logs' ? 'bg-blue-100 text-blue-700 font-semibold' : 'text-gray-600 hover:bg-gray-100'">Логи</button>
+          <button @click="openSettings()" class="text-sm px-3 py-1 rounded-md" :class="page==='settings' ? 'bg-blue-100 text-blue-700 font-semibold' : 'text-gray-600 hover:bg-gray-100'">Настройки</button>
+        </div>
+        <div class="flex items-center gap-3">
+          <span class="text-sm text-gray-500" x-text="user?.name || user?.username"></span>
+          <button @click="logout" class="text-sm text-red-500 hover:underline">Выход</button>
+        </div>
+      </div>
+    </nav>
+
+    <div class="max-w-6xl mx-auto px-4 py-6">
+
+      <!-- ==================== ANNOUNCEMENTS LIST ==================== -->
+      <template x-if="page === 'list'">
+        <div class="fade-in">
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="text-xl font-bold">Анонсы</h2>
+            <button @click="openCreate()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition">+ Создать</button>
+          </div>
+
+          <div x-show="announcements.length === 0" class="text-gray-400 text-center py-12">Анонсов пока нет. Нажмите «Создать» выше.</div>
+
+          <div class="space-y-3">
+            <template x-for="ann in announcements" :key="ann.id">
+              <div class="bg-white rounded-xl shadow-sm border p-4 flex flex-col sm:flex-row sm:items-center gap-3">
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-2 mb-1">
+                    <span class="font-semibold" x-text="ann.name"></span>
+                    <span class="text-xs px-2 py-0.5 rounded-full font-medium"
+                      :class="{
+                        'bg-green-100 text-green-700': ann.status === 'active',
+                        'bg-yellow-100 text-yellow-700': ann.status === 'paused',
+                        'bg-red-100 text-red-700': ann.status === 'failed'
+                      }"
+                      x-text="ann.status"></span>
+                  </div>
+                  <div class="text-sm text-gray-500 truncate" x-text="ann.target_room + ' — ' + scheduleLabel(ann)"></div>
+                  <div class="text-xs text-gray-400 mt-1" x-show="ann.last_sent_at" x-text="'Последняя отправка: ' + new Date(ann.last_sent_at).toLocaleString('ru-RU', {hour12:false})"></div>
+                  <div class="text-xs text-red-400 mt-0.5" x-show="ann.fail_reason" x-text="'Ошибка: ' + ann.fail_reason"></div>
+                </div>
+                <div class="flex gap-2 flex-shrink-0">
+                  <button @click="sendNow(ann.id)" class="text-xs px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition" title="Отправить сейчас">Отправить</button>
+                  <button @click="openEdit(ann)" class="text-xs px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 transition">Редакт.</button>
+                  <button @click="toggleAnn(ann.id)" class="text-xs px-3 py-1.5 rounded-lg bg-yellow-50 text-yellow-700 hover:bg-yellow-100 transition" x-text="ann.status === 'active' ? 'Пауза' : 'Вкл.'"></button>
+                  <button @click="openLogs(ann.id)" class="text-xs px-3 py-1.5 rounded-lg bg-gray-50 text-gray-600 hover:bg-gray-100 transition">Логи</button>
+                  <button @click="deleteAnn(ann.id)" class="text-xs px-3 py-1.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition">Удал.</button>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+      </template>
+
+      <!-- ==================== CREATE / EDIT FORM ==================== -->
+      <template x-if="page === 'form'">
+        <div class="fade-in max-w-2xl mx-auto">
+          <h2 class="text-xl font-bold mb-4" x-text="editingId ? 'Редактировать анонс' : 'Новый анонс'"></h2>
+          <div class="bg-white rounded-xl shadow-sm border p-6 space-y-5">
+
+            <!-- Name -->
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Название</label>
+              <input x-model="form.name" class="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-400 outline-none" placeholder="Утреннее приветствие">
+            </div>
+
+            <!-- Message -->
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Текст сообщения</label>
+              <textarea x-model="form.message" class="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-400 outline-none" rows="4" placeholder="Доброе утро! Сегодня {{day}}, {{date}}. {{randomQuote}}"></textarea>
+              <p class="text-xs text-gray-400 mt-1">Шаблоны: <code>{{date}}</code> <code>{{time}}</code> <code>{{day}}</code> <code>{{datetime}}</code> <code>{{randomQuote}}</code></p>
+            </div>
+
+            <!-- Target room -->
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Целевой канал / пользователь</label>
+              <input x-model="form.target_room" list="rooms-list" class="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-400 outline-none" placeholder="#general или @username">
+              <datalist id="rooms-list">
+                <template x-for="r in rooms" :key="r.id">
+                  <option :value="'#' + r.name" x-text="r.name"></option>
+                </template>
+              </datalist>
+            </div>
+
+            <!-- Schedule type tabs -->
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-2">Расписание</label>
+              <div class="flex flex-wrap gap-1 mb-4">
+                <template x-for="t in [{v:'onetime',l:'Разовое'},{v:'interval',l:'Интервал'},{v:'weekly',l:'Еженедельно'},{v:'monthly',l:'Ежемесячно'},{v:'cron',l:'Cron'}]">
+                  <button @click="form.schedule_type = t.v"
+                    class="px-3 py-1 rounded-lg text-sm transition"
+                    :class="form.schedule_type === t.v ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'"
+                    x-text="t.l"></button>
+                </template>
+              </div>
+
+              <!-- Onetime -->
+              <div x-show="form.schedule_type === 'onetime'" class="space-y-3">
+                <div>
+                  <label class="text-sm text-gray-600">Дата и время отправки</label>
+                  <input x-model="form.scheduled_date" type="datetime-local" class="w-full border rounded-lg px-3 py-2">
+                </div>
+              </div>
+
+              <!-- Interval -->
+              <div x-show="form.schedule_type === 'interval'" class="space-y-3">
+                <div class="flex gap-3">
+                  <div class="flex-1">
+                    <label class="text-sm text-gray-600">Каждые</label>
+                    <input x-model.number="form.interval_value" type="number" min="1" class="w-full border rounded-lg px-3 py-2">
+                  </div>
+                  <div class="flex-1">
+                    <label class="text-sm text-gray-600">Единица</label>
+                    <select x-model="form.interval_unit" class="w-full border rounded-lg px-3 py-2">
+                      <option value="minutes">Минут</option>
+                      <option value="hours">Часов</option>
+                      <option value="days">Дней</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Weekly -->
+              <div x-show="form.schedule_type === 'weekly'" class="space-y-3">
+                <div>
+                  <label class="text-sm text-gray-600 mb-1 block">Дни недели</label>
+                  <div class="flex gap-1">
+                    <template x-for="d in [{v:1,l:'Пн'},{v:2,l:'Вт'},{v:3,l:'Ср'},{v:4,l:'Чт'},{v:5,l:'Пт'},{v:6,l:'Сб'},{v:0,l:'Вс'}]">
+                      <button @click="toggleDay(d.v)"
+                        class="w-10 h-10 rounded-lg text-sm font-medium transition"
+                        :class="form.weekly_days.includes(d.v) ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'"
+                        x-text="d.l"></button>
+                    </template>
+                  </div>
+                </div>
+                <div class="flex gap-3">
+                  <div><label class="text-sm text-gray-600">Час</label><input x-model.number="form.time_hour" type="number" min="0" max="23" class="w-20 border rounded-lg px-3 py-2"></div>
+                  <div><label class="text-sm text-gray-600">Минута</label><input x-model.number="form.time_minute" type="number" min="0" max="59" class="w-20 border rounded-lg px-3 py-2"></div>
+                </div>
+              </div>
+
+              <!-- Monthly -->
+              <div x-show="form.schedule_type === 'monthly'" class="space-y-3">
+                <div class="flex gap-3">
+                  <div><label class="text-sm text-gray-600">День месяца</label><input x-model.number="form.monthly_day" type="number" min="-1" max="31" class="w-24 border rounded-lg px-3 py-2"><p class="text-xs text-gray-400 mt-1">-1 = последний день</p></div>
+                  <div><label class="text-sm text-gray-600">Час</label><input x-model.number="form.time_hour" type="number" min="0" max="23" class="w-20 border rounded-lg px-3 py-2"></div>
+                  <div><label class="text-sm text-gray-600">Минута</label><input x-model.number="form.time_minute" type="number" min="0" max="59" class="w-20 border rounded-lg px-3 py-2"></div>
+                </div>
+              </div>
+
+              <!-- Cron -->
+              <div x-show="form.schedule_type === 'cron'" class="space-y-3">
+                <div>
+                  <label class="text-sm text-gray-600">Cron-выражение (5 полей)</label>
+                  <input x-model="form.cron_expression" class="w-full border rounded-lg px-3 py-2 font-mono" placeholder="*/30 9-18 * * 1-5">
+                  <p class="text-xs text-gray-400 mt-1">минута час день месяц день_недели</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Start / End dates -->
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="text-sm text-gray-600">Начать с (необязательно)</label>
+                <input x-model="form.start_date" type="datetime-local" class="w-full border rounded-lg px-3 py-2">
+              </div>
+              <div>
+                <label class="text-sm text-gray-600">Закончить (необязательно)</label>
+                <input x-model="form.end_date" type="datetime-local" class="w-full border rounded-lg px-3 py-2">
+              </div>
+            </div>
+
+            <!-- Extra options -->
+            <div class="flex flex-wrap gap-6">
+              <label class="flex items-center gap-2 text-sm">
+                <input type="checkbox" x-model="form.quiet_mode" class="rounded">
+                Quiet mode (не отправлять, если никто не активен)
+              </label>
+              <label class="flex items-center gap-2 text-sm">
+                <input type="checkbox" x-model="form.skip_if_recent" class="rounded">
+                Пропускать если сообщение уже было за
+                <input x-model.number="form.skip_minutes" type="number" min="1" class="w-16 border rounded px-2 py-1" :disabled="!form.skip_if_recent"> мин.
+              </label>
+            </div>
+
+            <!-- Buttons -->
+            <div class="flex gap-3 pt-2">
+              <button @click="saveForm()" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-2 rounded-lg transition" x-text="editingId ? 'Сохранить' : 'Создать'"></button>
+              <button @click="page='list'; loadAnnouncements()" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-6 py-2 rounded-lg transition">Отмена</button>
+            </div>
+          </div>
+        </div>
+      </template>
+
+      <!-- ==================== LOGS ==================== -->
+      <template x-if="page === 'logs'">
+        <div class="fade-in">
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="text-xl font-bold">Логи отправки</h2>
+            <button @click="page='list'; loadAnnouncements()" class="text-sm text-blue-600 hover:underline">&larr; К анонсам</button>
+          </div>
+
+          <div x-show="logs.length === 0" class="text-gray-400 text-center py-12">Логов пока нет.</div>
+
+          <div class="bg-white rounded-xl shadow-sm border overflow-hidden">
+            <table class="w-full text-sm" x-show="logs.length">
+              <thead class="bg-gray-50 text-gray-500 text-xs uppercase">
+                <tr>
+                  <th class="px-4 py-2 text-left">Время</th>
+                  <th class="px-4 py-2 text-left">Анонс ID</th>
+                  <th class="px-4 py-2 text-left">Статус</th>
+                  <th class="px-4 py-2 text-left">Детали</th>
+                </tr>
+              </thead>
+              <tbody>
+                <template x-for="log in logs" :key="log.id">
+                  <tr class="border-t">
+                    <td class="px-4 py-2 text-gray-500" x-text="new Date(log.sent_at).toLocaleString('ru-RU', {hour12:false})"></td>
+                    <td class="px-4 py-2" x-text="log.announcement_id"></td>
+                    <td class="px-4 py-2">
+                      <span class="px-2 py-0.5 rounded-full text-xs font-medium"
+                        :class="log.status === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'"
+                        x-text="log.status"></span>
+                    </td>
+                    <td class="px-4 py-2 text-gray-500 truncate max-w-xs" x-text="log.details || '—'"></td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </template>
+
+      <!-- ==================== SETTINGS ==================== -->
+      <template x-if="page === 'settings'">
+        <div class="fade-in max-w-xl mx-auto">
+          <h2 class="text-xl font-bold mb-4">Настройки</h2>
+          <div class="bg-white rounded-xl shadow-sm border p-6 space-y-4">
+
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">URL Rocket.Chat</label>
+              <input x-model="settings.rc_url" class="w-full border rounded-lg px-3 py-2" placeholder="https://rocketchat.example.com">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">User ID техпользователя</label>
+              <input x-model="settings.rc_user_id" class="w-full border rounded-lg px-3 py-2" placeholder="aBcDeFgHiJkLmN">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Auth Token техпользователя</label>
+              <input x-model="settings.rc_token" class="w-full border rounded-lg px-3 py-2" placeholder="Вставьте token">
+              <p class="text-xs text-gray-400 mt-1">Токен маскируется при чтении. Введите новый, чтобы заменить.</p>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Имя бота (alias)</label>
+              <input x-model="settings.bot_alias" class="w-full border rounded-lg px-3 py-2" placeholder="AutoAnnouncer">
+            </div>
+
+            <div class="flex gap-3 pt-2">
+              <button @click="saveSettings()" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-2 rounded-lg transition">Сохранить</button>
+              <button @click="testRcConnection()" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-6 py-2 rounded-lg transition">Тест подключения</button>
+            </div>
+            <p x-show="settingsTestResult" class="text-sm" :class="settingsTestResult.startsWith('OK') ? 'text-green-600' : 'text-red-500'" x-text="settingsTestResult"></p>
+          </div>
+        </div>
+      </template>
+
+    </div><!-- /container -->
+  </div>
+</template>
+
+</body>
+</html>

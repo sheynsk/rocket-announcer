@@ -1,0 +1,22 @@
+body { font-family: 'Inter', system-ui, sans-serif; }
+
+[x-cloak] { display: none !important; }
+
+.fade-in { animation: fadeIn .2s ease-in; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+.status-active  { color: #16a34a; }
+.status-paused  { color: #ca8a04; }
+.status-failed  { color: #dc2626; }
+
+.toast {
+  position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 100;
+  padding: .75rem 1.25rem; border-radius: .5rem; color: #fff;
+  font-weight: 500; box-shadow: 0 4px 14px rgba(0,0,0,.15);
+  animation: slideUp .3s ease;
+}
+.toast-success { background: #16a34a; }
+.toast-error   { background: #dc2626; }
+@keyframes slideUp { from { opacity:0; transform: translateY(20px); } to { opacity:1; transform:none; } }
+
+textarea { min-height: 6rem; }

@@ -1,0 +1,16 @@
+{
+  "name": "rocket-announcer",
+  "version": "1.0.0",
+  "description": "Standalone web app for scheduling announcements in Rocket.Chat",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "express-session": "^1.18.1",
+    "node-cron": "^3.0.3",
+    "sql.js": "^1.11.0"
+  }
+}
