@@ -1,0 +1,9 @@
+# Example aliases file for upload-emojis.js
+# Use either "name: alias1, alias2" or "name=alias1,alias2"
+#
+# Point ALIASES_FILE to this file when running the uploader:
+# ALIASES_FILE=./emoji-aliases.example.txt npm run upload-emojis
+
+smile: grin, happy
+rocket=ship, space-rocket
+party: celebration, hooray

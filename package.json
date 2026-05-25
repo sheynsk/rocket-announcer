@@ -5,7 +5,8 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "upload-emojis": "node upload-emojis.js"
   },
   "dependencies": {
     "express": "^4.21.0",
