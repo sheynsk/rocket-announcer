@@ -6,7 +6,9 @@
   "private": true,
   "scripts": {
     "start": "node server.js",
-    "upload-emojis": "node upload-emojis.js"
+    "upload-emojis": "node upload-emojis.js",
+    "build-app-exe": "node build-app-exe.js",
+    "build-upload-emojis-exe": "node build-upload-emojis-exe.js"
   },
   "dependencies": {
     "express": "^4.21.0",

@@ -46,6 +46,18 @@ Optional variables:
 
 Use `upload-emojis.js` to load emoji images from a folder into Rocket.Chat.
 
+If you want a Windows launcher for the main app, build `RocketAnnouncerApp.exe` with:
+
+```bash
+npm run build-app-exe
+```
+
+If you want a Windows launcher for the emoji uploader, build `UploadEmojis.exe` with:
+
+```bash
+npm run build-upload-emojis-exe
+```
+
 ### Basic usage
 
 ```bash
@@ -55,6 +67,8 @@ RC_TOKEN="..." \
 EMOJI_DIR="./emojis" \
 npm run upload-emojis
 ```
+
+On Windows, you can also run `upload-emojis.bat` directly, or use the generated `UploadEmojis.exe`.
 
 ### Aliases file
 
